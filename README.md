@@ -1,89 +1,166 @@
-# BusTrack - School Bus Tracking System
+# 🚌 BusTrack - Advanced School Bus Tracking System
 
-**BusTrack** is a real-time fleet management and tracking solution designed specifically for school transportation. It ensures student safety and operational efficiency by connecting Admins, Drivers, and Parents in a unified ecosystem. The system provides live location updates, route management, and role-specific interfaces to streamline school bus operations.
+**BusTrack** is a production-grade, real-time fleet management solution designed for schools. It orchestrates a seamless flow of data between **Drivers (App)**, **Admins (Dashboard)**, and **Parents (Tracking)**, ensuring student safety through live location updates and instant breakdown reporting.
 
 ---
 
-# Project Status & Installation Guide
+## 🏗️ Technical Architecture
 
-## Installation & Setup
+BusTrack operates on a **Client-Server-Database** architecture powered by a persistent **Real-Time Event Bus**.
+
+```mermaid
+graph TD
+    subgraph Client_Side
+        Driver[📱 Driver App]
+        Admin[💻 Admin Dashboard]
+        Parent[👪 Parent Portal]
+    end
+
+    subgraph Server_Side
+        LB[Express API Gateway]
+        Socket[🔌 Socket.io Server]
+        Auth[🔐 JWT Auth Middleware]
+    end
+
+    subgraph Data_Layer
+        Postgres[(🐘 PostgreSQL DB)]
+    end
+
+    Driver -->|Emits: Location/Status| Socket
+    Socket -->|Broadcasts: Bus Updates| Admin
+    Socket -->|Broadcasts: Bus Updates| Parent
+    Socket -->|Persists Data| Postgres
+    
+    Admin -->|REST API| LB
+    Driver -->|REST API| LB
+    LB -->|Query| Postgres
+```
+
+---
+
+## 🛠️ Technology Stack
+
+### **Frontend (Client)**
+Built with performance and component reusability in mind.
+| Component | Technology | Version | Purpose |
+|-----------|------------|---------|---------|
+| **Core Framework** | **Next.js** | `16.1` | App Router, Server Components, SSR/CSR |
+| **Language** | **TypeScript** | `5.x` | Type Safety & Developer Experience |
+| **UI Library** | **React** | `19.2` | Component Architecture |
+| **Styling** | **TailwindCSS** | `4.0` | Utility-first responsive design |
+| **Maps** | **React-Leaflet** | `5.0` | Interactive maps & markers |
+| **Real-Time** | **Socket.io-client**| `4.8` | Websocket connection management |
+
+### **Backend (Server)**
+A robust Node.js runtime focusing on event-driven architecture.
+| Component | Technology | Version | Purpose |
+|-----------|------------|---------|---------|
+| **Runtime** | **Node.js** | `20+` | JavaScript Runtime |
+| **Server** | **Express.js** | `5.2` | REST API Routing |
+| **Real-Time** | **Socket.io** | `4.8` | Bi-directional Event Bus |
+| **Database** | **PostgreSQL** | `16.x` | Relational Data Persistence (via Supabase) |
+| **DB Client** | **pg** | `8.16` | Native Postgres Driver |
+| **Auth** | **JWT** | `9.0` | Stateless Authentication Tokens |
+| **Security** | **Bcrypt.js** | `3.0` | Password Hashing |
+
+---
+
+## ⚡ Key Technical Implementations
+
+### 1. The Real-Time Location Engine
+We bypassed traditional HTTP polling in favor of a **Websocket-first approach**.
+*   **Driver Emission:** The driver app continually calculates GPS coordinates and speed.
+*   **Server Processing:** 
+    *   Validates the incoming socket payload.
+    *   **Persists** the location snapshot to PostgreSQL (`live_locations` table).
+    *   **Broadcasts** the update immediately to `admin` and `parent` rooms.
+*   **Optimistic UI:** The specific bus marker on the map updates instantly via React state, maintaining 60fps animations without page reloads.
+
+### 2. Physics-Based Route Simulation ("Cruise Mode")
+To facilitate testing without physical driving, the Driver App includes a custom simulation engine:
+*   **Algorithm:** Uses the **Haversine Formula** to calculate precise distances between waypoints.
+*   **Interpolation:** Linear interpolation (LERP) generates intermediate coordinates between route nodes to simulate smooth movement at variable speeds (e.g., 40km/h).
+*   **State Machine:** Handles `Start`, `Stop`, and `Pause` states relative to the route geometry.
+
+### 3. Repository/Store Pattern (Backend)
+The codebase strictly separates "Business Logic" from "Data Access".
+*   **`store.js`**: A centralized repository file containing all SQL queries. Any change in the database technology (e.g., to MongoDB) would only require changes in this one file, leaving `index.js` (API routes) untouched.
+
+### 4. Breakdown Handling System
+A critical safety feature implemented with high priority events:
+*   **Schema:** `buses` table has a `current_status` ENUM ('MOVING', 'STOPPED', 'BREAKDOWN').
+*   **Event Flow:** Driver toggles status -> Socket Event `status-change` -> Server Updates DB -> Broadcasts Alert.
+*   **Visuals:** Maps automatically swap the green Bus Icon for a specialized **Alert Icon**, and parents receive immediate Toast Notifications.
+
+---
+
+## 🗄️ Database Schema (PostgreSQL)
+
+The relational schema is designed for data integrity and quick lookups.
+
+*   **`users`**: Stores credentials and role (`admin` | `driver` | `parent`).
+*   **`buses`**: Core fleet entity, linked to `driver_id` and `route_name`.
+*   **`live_locations`**: fast-access table keyed by `bus_id` for the latest GPS ping.
+*   **`students`**: Linked to `parent_id` and assigned `bus_id`.
+*   **`attendance`**: Daily log of student boarding status.
+
+---
+
+## 🚀 Installation & Setup
 
 ### Prerequisites
-- Node.js (v18+ recommended)
-- NPM or Yarn
+*   Node.js (v18+)
+*   NPM or Yarn
+*   PostgreSQL Database (Local or Cloud like Supabase)
 
 ### 1. Server Setup
-The server handles API requests and real-time socket connections.
-
-1.  Navigate to the server directory:
+1.  Navigate to `server`:
     ```bash
     cd server
-    ```
-2.  Install dependencies:
-    ```bash
     npm install
     ```
-3.  (Optional) Create a `.env` file in the `server` directory with the following content (defaults are provided in code for development):
+2.  Configure `.env`:
     ```env
-    PORT=3001
-    JWT_SECRET=your_super_secret_key
+    DATABASE_URL=postgresql://user:pass@host:5432/db
+    JWT_SECRET=your_secret_key
     ```
-4.  Start the development server:
+3.  Start backend:
     ```bash
     npm run dev
+    # Server runs on http://localhost:3001
     ```
-    *Server will start on `http://localhost:3001`*
 
 ### 2. Client Setup
-The client is a Next.js application for Admin, Driver, and Parent interfaces.
-
-1.  Open a new terminal and navigate to the client directory:
+1.  Navigate to `client`:
     ```bash
     cd client
-    ```
-2.  Install dependencies:
-    ```bash
     npm install
     ```
-3.  Start the development server:
+2.  Start frontend:
     ```bash
     npm run dev
+    # App runs on http://localhost:3000
     ```
-    *Client will start on `http://localhost:3000`*
 
 ---
 
-## Implemented Features (Done Till Now)
+## 📂 Project Structure
 
-### Backend (Server)
-*   **Tech Stack:** Node.js, Express, Socket.io, In-Memory Store (simulating DB).
-*   **Authentication:**
-    *   JWT-based authentication (`/auth/login`).
-    *   Role-based access control Middleware (`requireRole` for 'admin', 'driver', 'parent').
-*   **API Endpoints (`/api`):**
-    *   **Fleet Management:** Add/Remove Buses, Assign Drivers to Buses.
-    *   **User Management:** Register/Remove Drivers and Students.
-    *   **Routes:** Define bus routes with waypoints.
-    *   **History:** Log trip history and events.
-*   **Real-Time Logic:**
-    *   Socket.io integration for bi-directional communication.
-    *   Events for `update-location`, `bus-update`, `trip-start`, `trip-end`.
-
-### Frontend (Client)
-*   **Tech Stack:** Next.js (App Router), TailwindCSS, React-Leaflet.
-*   **Shared Components:**
-    *   `Map.tsx`: Reusable Leaflet map component with custom markers and auto-centering logic.
-*   **Admin Dashboard (`/admin`):**
-    *   **Live Map:** Visualizes all active buses moving in real-time.
-    *   **Management:** Interfaces for adding buses and viewing fleet status.
-*   **Driver App (`/driver`):**
-    *   **Interactive Controls:** buttons to "Start Trip" and "Stop Trip".
-    *   **Simulation:** "Cruise Mode" to simulate movement along a route for testing.
-    *   **Live Tracking:** Transmits current location to server.
-*   **Parent/Student View:**
-    *   **My Bus:** Dedicated view to track the specific bus assigned to a student/parent.
-
-### Current Status
-*   Application is functional with simulated data (stored in-memory on server).
-*   Real-time updates are working for location tracking.
-*   Basic authentication flow is complete for all roles.
+```bash
+bustrack/
+├── client/                 # Next.js Frontend
+│   ├── app/                # App Router Pages
+│   │   ├── admin/          # Admin Dashboard
+│   │   ├── driver/         # Driver Mobile App
+│   │   └── parent/         # Parent Portal
+│   ├── components/         # Shared Components (Map.tsx)
+│   └── public/             # Static Assets (Icons)
+│
+├── server/                 # Express Backend
+│   ├── index.js            # API Routes & Socket Setup
+│   ├── store.js            # Database Queries (Repository)
+│   ├── db.js               # Postgres Connection Pool
+│   └── scripts/            # Database Seeding & Utilities
+│
+└── README.md               # Documentation
+```

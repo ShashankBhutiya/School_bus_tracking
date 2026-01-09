@@ -20,6 +20,16 @@ const addUser = async (user) => {
     return user;
 };
 
+const updateUser = async (id, user) => {
+    const { name, email, phone, role } = user;
+    // Not updating password for now to keep it simple, or add if needed
+    await db.query(
+        'UPDATE users SET name = $1, email = $2, phone = $3, role = $4 WHERE id = $5',
+        [name, email, phone, role, id]
+    );
+    return { id, ...user };
+};
+
 const removeUser = async (id) => {
     await db.query('DELETE FROM users WHERE id = $1', [id]);
 };
@@ -90,6 +100,15 @@ const addBus = async (bus) => {
     return bus;
 };
 
+const updateBus = async (id, bus) => {
+    const { bus_number, driver_id, route_name } = bus;
+    await db.query(
+        'UPDATE buses SET bus_number = $1, driver_id = $2, route_name = $3 WHERE id = $4',
+        [bus_number, driver_id, route_name, id]
+    );
+    return { id, ...bus };
+};
+
 const removeBus = async (id) => {
     await db.query('DELETE FROM buses WHERE id = $1', [id]);
 };
@@ -107,6 +126,19 @@ const addStudent = async (student) => {
         [id, name, parent_id, bus_id, pickup_lat, pickup_lng]
     );
     return student;
+};
+
+const updateStudent = async (id, student) => {
+    const { name, parent_id, bus_id, pickup_lat, pickup_lng } = student;
+    await db.query(
+        'UPDATE students SET name = $1, parent_id = $2, bus_id = $3, pickup_lat = $4, pickup_lng = $5 WHERE id = $6',
+        [name, parent_id, bus_id, pickup_lat, pickup_lng, id]
+    );
+    return { id, ...student };
+};
+
+const removeStudent = async (id) => {
+    await db.query('DELETE FROM students WHERE id = $1', [id]);
 };
 
 const findStudentsByParentId = async (parentId) => {
@@ -184,8 +216,8 @@ const getTripLogs = async (busId) => {
 
 module.exports = {
     findUserByEmail, findUserById, addUser, removeUser, getUsers, getUsersByRole,
-    getBuses, findBusById, addBus, removeBus,
-    getStudents, addStudent, findStudentsByParentId, findStudentByParentAndBus,
+    getBuses, findBusById, addBus, removeBus, updateBus,
+    getStudents, addStudent, removeStudent, findStudentsByParentId, findStudentByParentAndBus, updateStudent,
     updateLocation, getLiveLocations, getStudentsByBus, markAttendance,
-    updateBusStatus, getRoutes, addRoute, getTripLogs
+    updateBusStatus, getRoutes, addRoute, getTripLogs, updateUser
 };

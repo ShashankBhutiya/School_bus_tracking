@@ -51,7 +51,7 @@ export default function DriverDashboard() {
         socketRef.current.on('disconnect', () => setConnected(false));
 
         // Fetch assigned bus
-        fetch('http://localhost:3001/api/buses', { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`http://localhost:3001/api/buses?_t=${Date.now()}`, { headers: { 'Authorization': `Bearer ${token}` } })
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.buses) {
@@ -62,14 +62,31 @@ export default function DriverDashboard() {
                         // Check for stale 'moving' state (broken session)
                         const isStale = b.location?.timestamp && (Date.now() - Number(b.location.timestamp) > 10 * 60 * 1000); // 10 mins
 
+                        let initialStatus = b.current_status || 'stationary';
+
+                        // Force stop if stale moving
                         if (b.current_status === 'moving' && isStale) {
                             console.log('Detected stale moving state, resetting to stationary');
-                            setStatus('stationary');
-                            setActive(false);
-                            // We'll emit the correction once socket connects below
+                            initialStatus = 'stopped';
+                        }
+
+                        // Apply Status
+                        setStatus(initialStatus === 'moving' ? 'moving' : (initialStatus === 'breakdown' ? 'breakdown' : 'stationary'));
+
+                        if (initialStatus === 'moving') {
+                            setActive(true);
+                            startTracking();
                         } else {
-                            if (b.current_status) setStatus(b.current_status);
-                            if (b.current_status === 'moving') setActive(true);
+                            setActive(false);
+                            // If it WAS moving but is now stale/stopped, we need to correct the server
+                            if (b.current_status === 'moving' && isStale && socketRef.current) {
+                                socketRef.current.emit('driver_update_location', {
+                                    busId: b.id,
+                                    lat: b.location?.latitude || 31.2982,
+                                    lng: b.location?.longitude || 75.5626,
+                                    status: 'stopped'
+                                });
+                            }
                         }
 
                         // Initialize lastPosRef from server data if available to prevent 0,0 jump
@@ -83,16 +100,6 @@ export default function DriverDashboard() {
 
                         socketRef.current?.emit('join_bus', { busId: b.id, role: 'driver' });
 
-                        // If we detected stale state, correct the server now that we are about to join
-                        if (b.current_status === 'moving' && isStale && socketRef.current) {
-                            socketRef.current.emit('driver_update_location', {
-                                busId: b.id,
-                                lat: b.location?.latitude || 31.2982,
-                                lng: b.location?.longitude || 75.5626,
-                                status: 'stopped'
-                            });
-                        }
-
                         // Send initial location ping so map shows something
                         if (navigator.geolocation) {
                             navigator.geolocation.getCurrentPosition(pos => {
@@ -101,8 +108,8 @@ export default function DriverDashboard() {
                                 socketRef.current?.emit('driver_update_location', {
                                     busId: b.id,
                                     lat: latitude,
-                                    lng: longitude,
-                                    status: b.current_status || 'stationary'
+                                    lng: longitude, // Use effective status
+                                    status: initialStatus === 'moving' ? 'moving' : (initialStatus === 'breakdown' ? 'breakdown' : 'stopped')
                                 });
                             });
                         }

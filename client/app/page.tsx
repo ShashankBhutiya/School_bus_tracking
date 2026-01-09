@@ -58,9 +58,9 @@ export default function Home() {
         </form>
         <div className="mt-4 text-xs text-gray-500">
           <p>Demo Credentials:</p>
-          <p>Admin: admin@school.com / 123</p>
-          <p>Driver: driver@school.com / 123</p>
-          <p>Parent: parent@school.com / 123</p>
+          <p>Admin: admin@demo.com / 123</p>
+          <p>Driver: driver101@demo.com / 123</p>
+          <p>Parent: parent101@demo.com / 123</p>
         </div>
       </div>
     </div>

@@ -33,13 +33,8 @@ const run = async () => {
             "INSERT INTO students (id, name, parent_id, bus_id, pickup_lat, pickup_lng) VALUES ('student_demo', 'Demo Student', 'parent_demo', 'bus_demo', 28.6500, 77.2100)"
         );
 
-        // Initial Location for Demo Bus so map isn't empty
-        await db.query("DELETE FROM live_locations WHERE bus_id = 'bus_demo'");
-        const now = Date.now();
-        await db.query(
-            "INSERT INTO live_locations (bus_id, latitude, longitude, timestamp) VALUES ('bus_demo', 28.6139, 77.2090, $1)",
-            [now]
-        );
+        // Clear ALL live locations to ensure no ghost buses
+        await db.query("DELETE FROM live_locations");
 
         console.log('✅ Demo credentials ready:');
         console.log('   Driver: driver@school.com / 123');

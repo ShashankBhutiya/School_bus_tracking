@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Marker, Popup } from 'react-leaflet';
+import { Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 
 type BusMarkerProps = {
@@ -178,6 +178,13 @@ export default function BusMarker({ bus, onClick }: BusMarkerProps) {
             icon={createRotatedIcon(bus.current_status || 'stopped', rotation, bus.bus_number || bus.name)}
             eventHandlers={{ click: onClick }}
         >
+            {bus.current_status === 'breakdown' && (
+                <Tooltip permanent direction="top" offset={[0, -45]} opacity={1} className="custom-tooltip-error">
+                    <div className="bg-red-600 text-white px-2 py-1 rounded font-bold text-xs uppercase shadow-lg animate-pulse whitespace-nowrap">
+                        ⚠️ Breakdown
+                    </div>
+                </Tooltip>
+            )}
             <Popup>
                 <div className="text-center min-w-[150px]">
                     <h3 className="font-bold text-lg">{bus.bus_number || bus.name}</h3>
@@ -188,7 +195,7 @@ export default function BusMarker({ bus, onClick }: BusMarkerProps) {
                         <div className="font-mono text-slate-800">{Math.round(bus.location?.speed || 0)} km/h</div>
                     </div>
 
-                    <div className={`text-xs uppercase font-bold mt-1 px-2 py-1 rounded text-white ${bus.current_status === 'moving' ? 'bg-green-500' : 'bg-red-500'}`}>
+                    <div className={`text-xs uppercase font-bold mt-1 px-2 py-1 rounded text-white ${bus.current_status === 'moving' ? 'bg-green-500' : (bus.current_status === 'breakdown' ? 'bg-red-600 animate-pulse' : 'bg-red-500')}`}>
                         {bus.current_status || 'Stopped'}
                     </div>
                 </div>

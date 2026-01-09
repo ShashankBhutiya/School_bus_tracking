@@ -77,9 +77,23 @@ module.exports = (io, socket) => {
             } catch (e) { console.error(e); }
         });
 
-        socket.on('join_admin', () => {
+        socket.on('join_admin', async () => {
             console.log(`Socket ${socket.id} joined admin_room`);
             socket.join('admin_room');
+
+            // Send current state of all buses immediately to correct "default" map state
+            try {
+                const buses = await store.getBuses();
+                buses.forEach(bus => {
+                    // Only send if it has a location
+                    if (bus.location) {
+                        socket.emit('global_update', bus);
+                    }
+                });
+                console.log(`Sent initial state of ${buses.length} buses to admin ${socket.id}`);
+            } catch (err) {
+                console.error('Error sending initial admin data:', err);
+            }
         });
     });
 };

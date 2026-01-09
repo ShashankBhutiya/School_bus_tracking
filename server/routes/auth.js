@@ -11,6 +11,11 @@ router.post('/login', async (req, res) => {
         // Find by email
         const user = await store.findUserByEmail(email);
 
+        // Check if user exists
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+
         // Verify password
         const bcrypt = require('bcryptjs');
         const valid = await bcrypt.compare(password, user.password_hash);

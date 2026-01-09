@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl, Polyline, CircleMarker, Tooltip } from 'react-leaflet';
 import BusMarker from './BusMarker';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -34,6 +34,8 @@ const busIcon = createBusIcon('stopped');
 type MapProps = {
     busId: string;
     role: 'parent' | 'admin' | 'driver';
+    destination?: { lat: number; lng: number };
+    eta?: string;
 };
 
 // New Delhi Coordinates
@@ -70,7 +72,12 @@ const AutoBounds = ({ buses }: { buses: any[] }) => {
     const map = useMap();
 
     useEffect(() => {
-        const validBuses = buses.filter(b => b.location && b.location.latitude && b.location.longitude);
+        const validBuses = buses.filter(b => {
+            if (!b.location || !b.location.latitude || !b.location.longitude) return false;
+            // Filter stale > 15 mins
+            const timeDiff = Date.now() - Number(b.location.timestamp || 0);
+            return timeDiff <= 900000;
+        });
         if (validBuses.length === 0) return;
 
         const bounds = L.latLngBounds(validBuses.map(b => [b.location.latitude, b.location.longitude]));
@@ -83,7 +90,7 @@ const AutoBounds = ({ buses }: { buses: any[] }) => {
     return null;
 };
 
-export default function MapComponent({ busId, role }: MapProps) {
+export default function MapComponent({ busId, role, destination, eta }: MapProps) {
     const [buses, setBuses] = useState<any>({});
     const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
     const [now, setNow] = useState(Date.now()); // For staleness checks
@@ -301,11 +308,46 @@ export default function MapComponent({ busId, role }: MapProps) {
                     />
                 </LayersControl.BaseLayer>
             </LayersControl>
+
+            {/* Parent Route Visualization */}
+            {role === 'parent' && destination && busList.length > 0 && busList[0].location && (
+                <>
+                    {/* Destination Marker */}
+                    <Marker position={[destination.lat, destination.lng]} icon={new L.Icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/512/854/854878.png', // Home/Destination Icon
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 32],
+                        popupAnchor: [0, -32]
+                    })}>
+                        <Tooltip permanent direction="top" offset={[0, -20]} className="font-bold text-sm bg-blue-600 text-white border-0 shadow-lg px-2 py-1 rounded">
+                            {eta ? `ETA: ${eta}` : '...'}
+                        </Tooltip>
+                    </Marker>
+
+                    {/* Route Line */}
+                    <Polyline
+                        positions={[
+                            [busList[0].location.latitude, busList[0].location.longitude],
+                            [destination.lat, destination.lng]
+                        ]}
+                        pathOptions={{ color: '#2563eb', weight: 4, dashArray: '10, 10', opacity: 0.6 }}
+                    />
+                </>
+            )}
+
             {/* Auto Bounds for Admin */}
             {role === 'admin' && busList.length > 0 && <AutoBounds buses={busList} />}
 
             {busList.map((bus: any) => {
                 if (!bus.location) return null;
+
+                // Hide buses with stale location (> 15 minutes) unless it's the specific one we are tracking as driver/parent
+                // But for Admin map, we want to hide "offline" buses from cluttering the view at default coords.
+                // The user said "rest of buses at default location unless logged in".
+                // So if timestamp is old, don't render.
+                const timeDiff = Date.now() - Number(bus.location.timestamp || 0);
+                // 15 minutes = 15 * 60 * 1000 = 900000
+                if (timeDiff > 900000) return null;
 
                 return (
                     <BusMarker
@@ -325,10 +367,15 @@ export default function MapComponent({ busId, role }: MapProps) {
                         {(() => {
                             const isStale = buses[selectedBusId].location?.timestamp && (Date.now() - Number(buses[selectedBusId].location.timestamp) > 60000);
                             const status = isStale ? 'stopped' : buses[selectedBusId].current_status;
+                            let circleClass = 'bg-slate-500 text-slate-500';
+                            if (status === 'moving') circleClass = 'bg-emerald-500 text-emerald-500 animate-pulse';
+                            if (status === 'stopped') circleClass = 'bg-rose-500 text-rose-500';
+                            if (status === 'breakdown') circleClass = 'bg-red-600 text-red-600 animate-ping';
+
                             return (
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] uppercase font-bold text-slate-400">{status}</span>
-                                    <span className={`h-3 w-3 rounded-full shadow-[0_0_10px_currentColor] ${status === 'moving' ? 'bg-emerald-500 text-emerald-500 animate-pulse' : 'bg-rose-500 text-rose-500'}`}></span>
+                                    <span className={`text-[10px] uppercase font-bold ${status === 'breakdown' ? 'text-red-500' : 'text-slate-400'}`}>{status}</span>
+                                    <span className={`h-3 w-3 rounded-full shadow-[0_0_10px_currentColor] ${circleClass}`}></span>
                                 </div>
                             )
                         })()}
@@ -361,9 +408,14 @@ export default function MapComponent({ busId, role }: MapProps) {
                             {(() => {
                                 const isStale = buses[selectedBusId].location?.timestamp && (Date.now() - Number(buses[selectedBusId].location.timestamp) > 60000);
                                 const status = isStale ? 'stopped' : (buses[selectedBusId].current_status || 'Stopped');
+                                let statusClasses = 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+                                if (status === 'moving') statusClasses = 'bg-green-500/20 text-green-400 border-green-500/30';
+                                if (status === 'stopped') statusClasses = 'bg-red-500/20 text-red-400 border-red-500/30';
+                                if (status === 'breakdown') statusClasses = 'bg-red-600 text-white border-red-600 animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.7)]';
+
                                 return (
-                                    <div className={`text-center py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest ${status === 'moving' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
-                                        {status}
+                                    <div className={`text-center py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest border ${statusClasses}`}>
+                                        {status === 'breakdown' ? '⚠️ BREAKDOWN' : status}
                                     </div>
                                 )
                             })()}

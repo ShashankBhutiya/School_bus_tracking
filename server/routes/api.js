@@ -42,6 +42,7 @@ router.get('/buses', async (req, res) => {
         } else if (req.user.role === 'driver') {
             res.json({ success: true, buses: buses });
         } else {
+            console.log(`[API] Access denied for user ${req.user.email} with role: ${req.user.role}`);
             res.status(403).json({ success: false, message: 'Access denied' });
         }
     } catch (err) {
@@ -55,6 +56,16 @@ router.post('/buses', requireRole('admin'), async (req, res) => {
         const id = 'bus_' + Date.now();
         await store.addBus({ id, bus_number, driver_id, route_name });
         res.json({ success: true, message: 'Bus added' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.put('/buses/:id', requireRole('admin'), async (req, res) => {
+    try {
+        const { bus_number, driver_id, route_name } = req.body;
+        await store.updateBus(req.params.id, { bus_number, driver_id, route_name });
+        res.json({ success: true, message: 'Bus updated' });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -90,10 +101,31 @@ router.post('/drivers', requireRole('admin'), async (req, res) => {
     }
 });
 
+router.put('/drivers/:id', requireRole('admin'), async (req, res) => {
+    try {
+        const { name, email, phone, role } = req.body;
+        await store.updateUser(req.params.id, { name, email, phone, role: role || 'driver' });
+        res.json({ success: true, message: 'Driver updated' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.delete('/drivers/:id', requireRole('admin'), async (req, res) => {
     try {
         await store.removeUser(req.params.id);
         res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+
+// --- Parents ---
+router.get('/parents', requireRole('admin'), async (req, res) => {
+    try {
+        const parents = await store.getUsersByRole('parent');
+        res.json({ success: true, parents });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -120,7 +152,65 @@ router.post('/students', requireRole('admin'), async (req, res) => {
     }
 });
 
+router.put('/students/:id', requireRole('admin'), async (req, res) => {
+    try {
+        const { name, parent_id, bus_id, pickup_lat, pickup_lng } = req.body;
+        await store.updateStudent(req.params.id, { name, parent_id, bus_id, pickup_lat, pickup_lng });
+        res.json({ success: true, message: 'Student updated' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.delete('/students/:id', requireRole('admin'), async (req, res) => {
+    try {
+        await store.removeStudent(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/buses/:busId/students', async (req, res) => {
+    try {
+        const students = await store.getStudentsByBus(req.params.busId);
+        res.json({ success: true, students });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // --- Parent Data Fetching ---
+router.get('/parent/dashboard', async (req, res) => {
+    try {
+        const userId = req.user.id;
+        // 1. Get all students for this parent
+        const students = await store.findStudentsByParentId(userId);
+
+        if (!students || students.length === 0) {
+            return res.json({ success: true, data: [] });
+        }
+
+        // 2. For each student, get bus and live location
+        const dashboardData = await Promise.all(students.map(async (student) => {
+            let bus = null;
+            if (student.bus_id) {
+                const busData = await store.findBusById(student.bus_id);
+                if (busData) {
+                    const locations = await store.getLiveLocations();
+                    const loc = locations[student.bus_id];
+                    bus = { ...busData, location: loc || null };
+                }
+            }
+            return { student, bus };
+        }));
+
+        res.json({ success: true, data: dashboardData });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.get('/parent/my-bus', async (req, res) => {
     try {
         const userId = req.user.id;
